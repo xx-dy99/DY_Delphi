@@ -1,0 +1,30 @@
+#delphi 프로젝트 파일
+*.dof
+*.dfm
+*.bpg
+*.dpk
+*.dproj.local
+*.groupproj.local
+*.dres
+
+#델파이 빌드 및 실행 파일
+*.exr
+*.dll
+*.dcu
+*.bpl
+
+#델파이 IDE관련 파일
+*.dsk
+*.local
+*.identcache
+*.stat
+*.tvsconfig
+*.cfg
+
+# 빌드관련 임시파일
+*.~*
+*.tmp
+*.log
+*.obj
+*.res
+*.drc

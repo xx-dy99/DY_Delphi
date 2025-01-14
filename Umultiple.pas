@@ -1,4 +1,4 @@
-unit uSample;
+unit Umultiple;
 
 interface
 
@@ -7,13 +7,14 @@ uses
   StdCtrls;
 
 type
-  TfrmSample = class(TForm)
+  TForm1 = class(TForm)
+    btnMultiple: TButton;
     edtFirst: TEdit;
     edtSecond: TEdit;
     lblFirst: TLabel;
     lblSecond: TLabel;
-    btnCheck: TButton;
-    procedure btnCheckClick(Sender: TObject);
+    lblResult: TLabel;
+    procedure btnMultipleClick(Sender: TObject);
   private
     { Private declarations }
   public
@@ -21,16 +22,19 @@ type
   end;
 
 var
-  frmSample: TfrmSample;
+  Form1: TForm1;
 
 implementation
 
 {$R *.DFM}
 
-procedure TfrmSample.btnCheckClick(Sender: TObject);
+procedure TForm1.btnMultipleClick(Sender: TObject);
+var
+F,L : integer;
 begin
-lblFirst.Caption := edtFirst.Text;
-lblSecond.Caption := edtSecond.Text;
+ F := strtoint(edtFirst.text);
+ L := strtoint(edtSecond.text);
+ lblResult.Caption := inttostr(F*L);
 end;
 
 end.
