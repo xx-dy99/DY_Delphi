@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<js:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+                xmlns:js="library://ns.apache.org/royale/basic"
+                xmlns:mx="library://ns.apache.org/royale/mx"
+                width="400" height="500">
+
+    <fx:Script>
+        <![CDATA[
+            import org.apache.royale.events.Event;
+            import org.apache.royale.net.Socket;
+
+            private var socket:Socket;
+
+            protected function connectToServer():void {
+                socket = new Socket();
+                socket.addEventListener(Event.CONNECT, onConnect);
+                socket.addEventListener(Event.CLOSE, onDisconnect);
+                socket.addEventListener(Event.CHANGE, onDataReceived);
+                socket.connect("127.0.0.1", 12345);
+            }
+
+            protected function onConnect(event:Event):void {
+                chatLog.text += "서버에 연결되었습니다.\n";
+            }
+
+            protected function onDataReceived(event:Event):void {
+                var receivedMessage:String = socket.readUTFBytes(socket.bytesAvailable);
+                chatLog.text += "서버: " + receivedMessage + "\n";
+            }
+
+            protected function onDisconnect(event:Event):void {
+                chatLog.text += "서버 연결 종료됨\n";
+            }
+
+            protected function sendMessage():void {
+                if (socket && socket.connected) {
+                    socket.writeUTFBytes(messageInput.text + "\n");
+                    socket.flush();
+                    chatLog.text += "나: " + messageInput.text + "\n";
+                    messageInput.text = "";
+                }
+            }
+        ]]>
+    </fx:Script>
+
+    <js:Container width="100%" height="100%">
+        <js:Button text="서버 연결" click="connectToServer()"/>
+        <js:TextArea id="chatLog" width="100%" height="300" editable="false"/>
+        <js:HGroup width="100%">
+            <js:TextInput id="messageInput" width="100%"/>
+            <js:Button text="전송" click="sendMessage()"/>
+        </js:HGroup>
+    </js:Container>
+
+</js:Application>
