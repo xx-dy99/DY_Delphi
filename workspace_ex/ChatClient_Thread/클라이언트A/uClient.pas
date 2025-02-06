@@ -99,8 +99,8 @@ begin
  //서버에서 보낸 메시지를 수신
  ReceivedText := Socket.ReceiveText;
 
- //메시지를 로그에 출력
- RichEditChat.Lines.Add(ReceivedText);
+ //상대방 메시지를 빨간색으로 출력
+ AddChatMessage(ReceivedText, False);
 end;
 
 procedure TForm1.AddChatMessage(const Msg: string; IsSelf: Boolean);
@@ -111,7 +111,7 @@ begin
  if IsSelf then
   RichEditChat.SelAttributes.Color := clBlue //자신의 메시지: 파란색
  else
-  RichEditChat.SelAttributes.Color := clRed; //상대방의 메시지 : 파란색
+  RichEditChat.SelAttributes.Color := clRed; //상대방의 메시지 : 빨간색
  //메시지 추가
  RichEditChat.Lines.Add(Msg);
  //자동 스크롤
