@@ -1,8 +1,8 @@
-program p111;
+program pChatApp;
 
 uses
   Forms,
-  u111 in 'u111.pas' {Form1};
+  uChatApp in 'uChatApp.pas' {Form1};
 
 {$R *.RES}
 
