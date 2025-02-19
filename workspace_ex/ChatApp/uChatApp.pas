@@ -20,6 +20,7 @@ type
     btnNickname: TButton;
     ServerSocket1: TServerSocket;
     ClientSocket1: TClientSocket;
+    btnStopServer: TButton;
     procedure btnStartServerClick(Sender: TObject);
     procedure btnStartClientClick(Sender: TObject);
     procedure btnSendClick(Sender: TObject);
@@ -28,6 +29,7 @@ type
       Socket: TCustomWinSocket);
     procedure ClientSocket1Read(Sender: TObject; Socket: TCustomWinSocket);
     Procedure AddChatMessage(const Msg: string; IsSelf: Boolean);
+    procedure btnStopServerClick(Sender: TObject);
   private
     { Private declarations }
   public
@@ -49,6 +51,7 @@ begin
 
  //UI변경 서버모드 활성화
  btnStartServer.Enabled := False;
+ btnStopServer.Enabled := True; //서버종료 버튼 활성화
  btnStartClient.Enabled := False;
  edtServerIP.Enabled := False;
 end;
@@ -134,7 +137,7 @@ begin
  //서버에서 보낸 메시지를 수신
  ReceivedText := Socket.ReceiveText;
 
- //상대방 메시지를 빨간색으로 출력
+ //상대 메시지를 빨간색으로 출력
  AddChatMessage(ReceivedText, False);
 end;
 
@@ -145,16 +148,31 @@ begin
 
  //메시지 색상설정
  if IsSelf then
-  RichEditChat.SelAttributes.Color := clBlue //자신의 메시지 파랑색
+  RichEditChat.SelAttributes.Color := clBlue //내 메시지 파랑
  else
-  RichEditChat.SelAttributes.Color := clRed; // 상대방의 메시지 빨강색
+  RichEditChat.SelAttributes.Color := clRed; // 상대 메시지 빨강
 
  //메시지 추가
  RichEditChat.Lines.Add(Msg);
 
- //자동스크롤
+ //자동스크롤 텍스트 길어지면 넘어가는거
  RichEditChat.SelStart := RichEditChat.GetTextLen;
  RichEditChat.Perform(EM_SCROLLCARET, 0, 0);
+end;
+
+procedure TForm1.btnStopServerClick(Sender: TObject);
+begin
+ if ServerSocket1.Active then
+ begin
+  ServerSocket1.Active := False; //서버 소켓 종료
+  RichEditChat.Lines.Add('서버가 종료되었습니다.');
+
+  //UI변경
+  btnStartServer.Enabled := True; //서버 시작 버튼 활성화
+  btnStopServer.Enabled := False; //서버 종료 버튼 비활성화
+  btnStartClient.Enabled := True; //클라이언트 실행 버튼 활성화
+  edtServerIP.Enabled := True; //서버IP 입력 활성화
+ end;
 end;
 
 end.
