@@ -9,24 +9,24 @@ uses
 
 type
   TForm1 = class(TForm)
-    SpinEditID: TSpinEdit;
     btnconnect: TButton;
     btnDisconnect: TButton;
     WSocket: TWSocket;
     pnlStatus: TPanel;
-    pnlTemp: TPanel;
-    pnlHum: TPanel;
+    pnlTemp1: TPanel;
+    pnlHum1: TPanel;
     TimerRequest: TTimer;
-    Label1: TLabel;
-    ImageList1: TImageList;
-    AdvPicture1: TAdvPicture;
     SpeedButton1: TSpeedButton;
     SpeedButton2: TSpeedButton;
+    pnlTemp18: TPanel;
+    pnlHum18: TPanel;
+    Label1: TLabel;
+    Label2: TLabel;
     procedure btnconnectClick(Sender: TObject);
     procedure WSocketSessionConnected(Sender: TObject; ErrCode: Word);
     procedure WSocketSessionClosed(Sender: TObject; ErrCode: Word);
     procedure btnDisconnectClick(Sender: TObject);
-    procedure RequestTemperatureHumidity();
+    procedure RequestTemperatureHumidity(deviceID: Byte);
     procedure WSocketDataAvailable(Sender: TObject; ErrCode: Word);
     procedure TimerRequestTimer(Sender: TObject);
     procedure SpeedButton1Click(Sender: TObject);
@@ -40,6 +40,7 @@ type
 var
   Form1: TForm1;
   rcvData: string;
+  currentDevice: Byte = 1;
 
 implementation
 
@@ -47,16 +48,13 @@ implementation
 
 procedure TForm1.btnconnectClick(Sender: TObject);
 var
-  deviceID : byte;
+  deviceID : Byte;
 begin
   WSocket.Close;  // 기존 연결 종료
   WSocket.Addr := '192.168.127.254';  // IP
   WSocket.Port := '4001';  // 포트
   WSocket.LineMode := False;
   WSocket.Connect;  // 연결 시도
-
-  //국번선택 및 적용
-  deviceID := SpinEditID.Value;
 
   //ui상태 변경
   pnlStatus.Caption := '연결 상태 : 연결시도중...';
@@ -130,13 +128,11 @@ begin
   Result := Char(Lo(crc)) + Char(Hi(crc));
 end;
 
-procedure TForm1.RequestTemperatureHumidity();
+procedure TForm1.RequestTemperatureHumidity(deviceID: Byte);
 var
   cmd : string;
-  deviceID : byte;
 begin
   rcvData := ''; //데이터 초기화
-  deviceID := SpinEditID.Value; //국번사용
 
   //Modbus패킷생성
   cmd := Char(deviceID) + //국번
@@ -150,10 +146,6 @@ begin
   WSocket.SendStr(cmd);//요청 전송
 end;
 
-
-
-
-
 procedure TForm1.WSocketDataAvailable(Sender: TObject; ErrCode: Word);
 var
   str : string;
@@ -162,6 +154,7 @@ var
   ch1, ch2 : char;
   temp, hum : smallint;
   tempFloat, humFloat : Double;
+  deviceID: Byte;
 begin
   str := WSocket.ReceiveStr;
   rcvData := rcvData + str;
@@ -173,15 +166,17 @@ begin
   calCRC := getchecksum(copy(rcvData, 1, len-2));
   rcvCRC := copy(rcvData, len-1, 2);
 
-  if calCRC <> rcvCRC then
-  begin
+  if calCRC <> rcvCRC then Exit;
+  {begin
     pnlStatus.Caption := 'CRC Error! 데이터 무효';
     pnlStatus.Color := clRed;
     Exit; // 오류발생 데이터무효
   end;
 
   pnlStatus.Caption := '데이터 정상 수신';
-  pnlStatus.Color := clLime;
+  pnlStatus.Color := clLime;}
+
+  deviceID := Ord(rcvData[1]);//첫번째 바이트가 국번임.
 
   //온도 데이터 변환
   ch1 := rcvData[4];
@@ -195,15 +190,32 @@ begin
   hum := (ord(ch1) shl 8) or ord(ch2);
   humFloat := hum / 100.0; //실수변환
 
-  //패널에 실시간 표시
-  pnlTemp.Caption := '온도: ' + FormatFloat('0.0', tempFloat) + '℃';
-  pnlHum.Caption := '습도: ' + FormatFloat('0.0', humFloat) + '%';
+  //국번에 따라 패널에 데이터 실시간 표시 위치결정
+  if deviceID = 1 then
+  begin
+    pnlTemp1.Caption := '온도: ' + FormatFloat('0.0', tempFloat) + '℃';
+    pnlHum1.Caption := '습도: ' + FormatFloat('0.0', humFloat) + '%';
+  end
+  else if deviceID = 18 then
+  begin
+    pnlTemp18.Caption := '온도: ' + FormatFloat('0.0', tempFloat) + '℃';
+    pnlHum18.Caption := '습도: ' + FormatFloat('0.0', humFloat) + '%';
+  end;
 end;
 
 
 procedure TForm1.TimerRequestTimer(Sender: TObject);
 begin
-  RequestTemperatureHumidity(); // 온습도 데이터 요청 (타이머안으로 빠짐)
+  if currentDevice = 1 then
+  begin
+    RequestTemperatureHumidity(1); // 온습도 데이터 요청 (타이머안으로 빠짐)
+    currentDevice := 18;
+  end
+  else
+  begin
+    RequestTemperatureHumidity(18);
+    currentDevice := 1;
+  end;
 end;
 
 
