@@ -8,13 +8,13 @@ uses
 
 type
   TForm2 = class(TForm)
-    chrtTempHum: TChart;
+    chrtTempHum1: TChart;
     Series1: TFastLineSeries;
     Series2: TFastLineSeries;
   private
     { Private declarations }
   public
-    { Public declarations }
+    procedure AddData(Temperature, Humidity: Double);
   end;
 
 var
@@ -23,5 +23,15 @@ var
 implementation
 
 {$R *.DFM}
+
+procedure TForm2.AddData(Temperature, Humidity: Double);
+var
+  CurrentTime: TDateTime;
+begin
+  CurrentTime := Now; //현재시간가져오기
+
+  Series1.AddXY(CurrentTime, Temperature);
+  Series2.AddXY(CurrentTime, Humidity);
+end;
 
 end.
