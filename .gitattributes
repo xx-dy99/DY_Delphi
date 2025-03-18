@@ -1,0 +1,3 @@
+*.dfm text eol=crlf
+*.dpr text
+*.dproj text

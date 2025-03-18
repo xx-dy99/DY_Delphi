@@ -22,8 +22,6 @@ type
     pnlHum18: TPanel;
     Label1: TLabel;
     Label2: TLabel;
-    btnShowGraph1: TButton;
-    btnShowGraph18: TButton;
     procedure btnconnectClick(Sender: TObject);
     procedure WSocketSessionConnected(Sender: TObject; ErrCode: Word);
     procedure WSocketSessionClosed(Sender: TObject; ErrCode: Word);
@@ -33,8 +31,6 @@ type
     procedure TimerRequestTimer(Sender: TObject);
     procedure SpeedButton1Click(Sender: TObject);
     procedure SpeedButton2Click(Sender: TObject);
-    procedure btnShowGraph1Click(Sender: TObject);
-    procedure btnShowGraph18Click(Sender: TObject);
   private
     { Private declarations }
   public
@@ -48,13 +44,10 @@ var
 
 implementation
 
-uses uGraph1, uGraph18;
-
 {$R *.DFM}
 
 procedure TForm1.btnconnectClick(Sender: TObject);
-var
-  deviceID : Byte;
+
 begin
   WSocket.Close;  // 기존 연결 종료
   WSocket.Addr := '192.168.127.254';  // IP
@@ -201,17 +194,11 @@ begin
   begin
     pnlTemp1.Caption := '온도: ' + FormatFloat('0.0', tempFloat) + '℃';
     pnlHum1.Caption := '습도: ' + FormatFloat('0.0', humFloat) + '%';
-
-    if Assigned(Form2) then
-      Form2.AddData(tempFloat, humFloat);
   end
   else if deviceID = 18 then
   begin
     pnlTemp18.Caption := '온도: ' + FormatFloat('0.0', tempFloat) + '℃';
     pnlHum18.Caption := '습도: ' + FormatFloat('0.0', humFloat) + '%';
-
-    if Assigned(Form3) then
-      Form3.AddData(tempFloat, humFloat);
   end;
 end;
 
@@ -240,24 +227,5 @@ procedure TForm1.SpeedButton2Click(Sender: TObject);
 begin
   btnDisconnectClick(Sender);
 end;
-
-procedure TForm1.btnShowGraph1Click(Sender: TObject);
-begin
-  if not Assigned(Form2) then
-    Form2 := TForm2.Create(Self);
-
-  Form2.Show;
-end;
-
-
-procedure TForm1.btnShowGraph18Click(Sender: TObject);
-begin
-  if not Assigned(Form2) then
-    Form3 := TForm3.Create(Self);
-
-  Form3.Show;
-
-end;
-
 
 end.
