@@ -5,7 +5,7 @@ interface
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
   WSocket, WSocketS, StdCtrls, Spin, ExtCtrls, ImgList, Buttons, AdvPicture,
-  Menus;
+  Menus, TeEngine, Series, TeeProcs, Chart;
 
 type
   TForm1 = class(TForm)
@@ -22,6 +22,12 @@ type
     pnlHum18: TPanel;
     Label1: TLabel;
     Label2: TLabel;
+    chrtTempHum1: TChart;
+    chrtTempHum18: TChart;
+    Series1: TFastLineSeries;
+    Series2: TFastLineSeries;
+    Series3: TFastLineSeries;
+    Series4: TFastLineSeries;
     procedure btnconnectClick(Sender: TObject);
     procedure WSocketSessionConnected(Sender: TObject; ErrCode: Word);
     procedure WSocketSessionClosed(Sender: TObject; ErrCode: Word);
@@ -31,6 +37,7 @@ type
     procedure TimerRequestTimer(Sender: TObject);
     procedure SpeedButton1Click(Sender: TObject);
     procedure SpeedButton2Click(Sender: TObject);
+    procedure AddData(deviceID: Byte; Temperature, Humidity: Double);
   private
     { Private declarations }
   public
@@ -41,6 +48,7 @@ var
   Form1: TForm1;
   rcvData: string;
   currentDevice: Byte = 1;
+  deviceID: Byte;
 
 implementation
 
@@ -226,6 +234,24 @@ end;
 procedure TForm1.SpeedButton2Click(Sender: TObject);
 begin
   btnDisconnectClick(Sender);
+end;
+
+procedure TForm1.AddData(deviceID: Byte; Temperature, Humidity: Double);
+var
+  CurrentTime: TDateTime;
+begin
+  CurrentTime := now;
+
+  if deviceID = 1 then
+  begin
+    Series1.AddXY(CurrentTime, Temperature);
+    HumGraph1.AddXY(CurrentTime, Humidity);
+  end
+  else if deviceID = 18 then
+  begin
+    TempGraph18.AddXY(CurrentTime, Temperature);
+    HumGraph18.AddXY(CurrentTime, Humidity);
+  end;
 end;
 
 end.
