@@ -24,10 +24,10 @@ type
     Label2: TLabel;
     chrtTempHum1: TChart;
     chrtTempHum18: TChart;
-    Series1: TFastLineSeries;
-    Series2: TFastLineSeries;
-    Series3: TFastLineSeries;
-    Series4: TFastLineSeries;
+    Series1: TLineSeries;
+    Series2: TLineSeries;
+    Series3: TLineSeries;
+    Series4: TLineSeries;
     procedure btnconnectClick(Sender: TObject);
     procedure WSocketSessionConnected(Sender: TObject; ErrCode: Word);
     procedure WSocketSessionClosed(Sender: TObject; ErrCode: Word);
@@ -38,6 +38,10 @@ type
     procedure SpeedButton1Click(Sender: TObject);
     procedure SpeedButton2Click(Sender: TObject);
     procedure AddData(deviceID: Byte; Temperature, Humidity: Double);
+    procedure chrtTempHum1MouseMove(Sender: TObject; Shift: TShiftState; X,
+      Y: Integer);
+    procedure chrtTempHum18MouseMove(Sender: TObject; Shift: TShiftState;
+      X, Y: Integer);
   private
     { Private declarations }
   public
@@ -197,6 +201,8 @@ begin
   hum := (ord(ch1) shl 8) or ord(ch2);
   humFloat := hum / 100.0; //실수변환
 
+  AddData(deviceID, tempFloat, humFloat);
+
   //국번에 따라 패널에 데이터 실시간 표시 위치결정
   if deviceID = 1 then
   begin
@@ -244,13 +250,85 @@ begin
 
   if deviceID = 1 then
   begin
+    if Series1.Count >= 20 then Series1.Delete(0);
+    if Series2.Count >= 20 then Series2.Delete(0);
+
     Series1.AddXY(CurrentTime, Temperature);
-    HumGraph1.AddXY(CurrentTime, Humidity);
+    Series2.AddXY(CurrentTime, Humidity);
+
+    if Series1.Count > 1 then
+    begin
+      chrtTempHum1.BottomAxis.Automatic := False;
+      chrtTempHum1.BottomAxis.Minimum := Series1.XValues[0];
+      chrtTempHum1.BottomAxis.Maximum := Series1.XValues[Series1.Count - 1];
+    end
+    else
+    begin
+      chrtTempHum1.BottomAxis.Automatic := true;
+    end;
+
+    chrtTempHum1.Repaint;
   end
   else if deviceID = 18 then
   begin
-    TempGraph18.AddXY(CurrentTime, Temperature);
-    HumGraph18.AddXY(CurrentTime, Humidity);
+    if Series3.Count >= 20 then Series3.Delete(0);
+    if Series4.Count >= 20 then Series4.Delete(0);
+
+    Series3.AddXY(CurrentTime, Temperature);
+    Series4.AddXY(CurrentTime, Humidity);
+
+    if Series3.Count > 1then
+    begin
+      chrtTempHum18.BottomAxis.Automatic := False;
+      chrtTempHum18.BottomAxis.Minimum := Series1.XValues[0];
+      chrtTempHum18.BottomAxis.Maximum := Series1.XValues[Series3.Count - 1];
+    end
+    else
+    begin
+      chrtTempHum18.BottomAxis.Automatic := true;
+    end;
+
+    chrtTempHum18.Repaint;
+  end;
+end;
+
+procedure TForm1.chrtTempHum1MouseMove(Sender: TObject; Shift: TShiftState;
+  X, Y: Integer);
+var
+  NearestPointTemp, NearestPointHum: integer;
+  TempValue, HumValue: Double;
+begin
+  NearestPointTemp := Series1.Clicked(X, Y);
+  NearestPointHum := Series2.Clicked(X, Y);
+
+  if (NearestPointTemp <> -1) and (NearestPointTemp <> -1) and
+     (NearestPointHum <> -1) and (NearestPointHum < Series2.Count) then
+  begin
+    TempValue := Series1.YValues[NearestPointTemp];
+    HumValue := Series2.YValues[NearestPointHum];
+
+    chrtTempHum1.Hint := Format('온도: %.1f℃ | 습도:%.1f%%', [TempValue, HumValue]);
+    Application.ActivateHint(Mouse.CursorPos);
+  end;
+end;
+
+procedure TForm1.chrtTempHum18MouseMove(Sender: TObject; Shift: TShiftState;
+  X, Y: Integer);
+var
+  NearestPointTemp, NearestPointHum: integer;
+  TempValue, HumValue: Double;
+begin
+  NearestPointTemp := Series3.Clicked(X, Y);
+  NearestPointHum := Series4.Clicked(X, Y);
+
+  if (NearestPointTemp <> -1) and (NearestPointTemp <> -1) and
+     (NearestPointHum <> -1) and (NearestPointHum < Series2.Count) then
+  begin
+    TempValue := Series3.YValues[NearestPointTemp];
+    HumValue := Series4.YValues[NearestPointHum];
+
+    chrtTempHum18.Hint := Format('온도: %.1f℃ | 습도:%.1f%%', [TempValue, HumValue]);
+    Application.ActivateHint(Mouse.CursorPos);
   end;
 end;
 
