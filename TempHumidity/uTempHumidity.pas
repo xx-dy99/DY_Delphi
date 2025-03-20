@@ -58,6 +58,7 @@ implementation
 
 {$R *.DFM}
 
+//버튼 클릭해서 온습도계와 연결
 procedure TForm1.btnconnectClick(Sender: TObject);
 
 begin
@@ -73,6 +74,7 @@ begin
   pnlStatus.Font.Color := clWhite;
 end;
 
+//연결이됐을때 패널 변화 및 온습도 데이터 요청
 procedure TForm1.WSocketSessionConnected(Sender: TObject; ErrCode: Word);
 begin
   if ErrCode = 0 then //연결성공
@@ -93,6 +95,7 @@ begin
   end;
 end;
 
+//연결이 끊어졌을때 패널상태 및 데이터 요청 중지
 procedure TForm1.WSocketSessionClosed(Sender: TObject; ErrCode: Word);
 begin
   pnlStatus.Caption := '연결 상태 : 끊어짐';
@@ -103,6 +106,7 @@ begin
   TimerRequest.Enabled := False;
 end;
 
+// 연결해제 버튼 눌렀을때 패
 procedure TForm1.btnDisconnectClick(Sender: TObject);
 begin
   WSocket.Close;
