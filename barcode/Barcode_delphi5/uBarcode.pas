@@ -109,7 +109,8 @@ procedure TForm1.btnTriggerScanClick(Sender: TObject);
 begin
   if ApdComPort1.Open then
   begin
-    ApdComPort1.PutChar(#2);
+    //ApdComPort1.PutChar(#2);
+    ApdComPort1.Output := #2;
     ShowMessage('스캔 명령을 전송했습니다.');
   end
   else
