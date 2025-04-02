@@ -3,41 +3,42 @@ unit uMotor;
 interface
 
 uses
-  Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  StdCtrls, WSocket, ExtCtrls;
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.ExtCtrls,
+  OverbyteIcsWndControl, OverbyteIcsWSocket;
 
 type
   TForm1 = class(TForm)
     wSocket: TWSocket;
-    btnConnect: TButton;
-    btnSendCommand: TButton;
-    Memo1: TMemo;
     pnlStatus: TPanel;
+    Memo1: TMemo;
+    btnConnect: TButton;
     btnDisconnect: TButton;
-    btnSetPosition: TButton;
-    edtSetPosition: TEdit;
-    Label1: TLabel;
+    btnSendCommand: TButton;
     btnExcite: TButton;
-    Label2: TLabel;
-    edtSetSpeed: TEdit;
-    btnSetSpeed: TButton;
     btnStartMotor: TButton;
     btnStopMotor: TButton;
-    Panel1: TPanel;
     btnRunContinue: TButton;
     btnStopContinue: TButton;
     btnStartZero: TButton;
     btnStopZero: TButton;
     btnEmergencyStop: TButton;
+    btnSetPosition: TButton;
+    btnSetSpeed: TButton;
+    edtSetPosition: TEdit;
+    edtSetSpeed: TEdit;
+    Panel1: TPanel;
+    Label1: TLabel;
+    Label2: TLabel;
     procedure SendModbusQuery(const Data: array of Byte);
     procedure btnConnectClick(Sender: TObject);
-    procedure btnSendCommandClick(Sender: TObject);
-    procedure wSocketDataAvailable(Sender: TObject; ErrCode: Word);
     procedure wSocketSessionConnected(Sender: TObject; ErrCode: Word);
     procedure wSocketSessionClosed(Sender: TObject; ErrCode: Word);
     procedure btnDisconnectClick(Sender: TObject);
-    procedure btnSetPositionClick(Sender: TObject);
+    procedure btnSendCommandClick(Sender: TObject);
+    procedure wSocketDataAvailable(Sender: TObject; ErrCode: Word);
     procedure btnExciteClick(Sender: TObject);
+    procedure btnSetPositionClick(Sender: TObject);
     procedure btnSetSpeedClick(Sender: TObject);
     procedure btnStartMotorClick(Sender: TObject);
     procedure btnStopMotorClick(Sender: TObject);
@@ -57,6 +58,7 @@ var
   Form1: TForm1;
   rcvData : string;
   ResponseBuffer : array of Byte;
+
 
 implementation
 
@@ -79,6 +81,7 @@ begin
   end;
   Result := crc;
 end;
+
 
 procedure TForm1.SendModbusQuery(const Data: array of Byte);
 var
@@ -109,7 +112,7 @@ begin
   Memo1.Lines.Add('º¸³¿: ' + TrimRight(logMsg));
 end;
 
-{$R *.DFM}
+{$R *.dfm}
 
 procedure TForm1.btnConnectClick(Sender: TObject);
 begin
@@ -254,15 +257,17 @@ begin
   highWord := Word((LongWord(stepValue) shr 16) and $FFFF);
   lowWord  := Word(LongWord(stepValue) and $FFFF);
 
-  SendModbusQuery([
-    $01, $10, $04, $02,
-    $00, $02, $04,
+  SendModbusQuery
+  ([
+    $01,
+    $10,
+    $04,
+    $02, $00,
+    $02, $04,
     highWord shr 8, highWord and $FF,
     lowWord shr 8, lowWord and $FF
   ]);
 end;
-
-
 
 procedure TForm1.btnSetSpeedClick(Sender: TObject);
 var
@@ -296,6 +301,8 @@ begin
     lowWord shr 8, lowWord and $FF
   ]);
 end;
+
+
 
 procedure TForm1.btnStartMotorClick(Sender: TObject);
 begin
@@ -362,7 +369,6 @@ begin
     $20, $00
   ]);
 end;
-
 
 procedure TForm1.btnEmergencyStopClick(Sender: TObject);
 begin
