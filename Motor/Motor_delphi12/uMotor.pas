@@ -5,7 +5,7 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.ExtCtrls,
-  OverbyteIcsWndControl, OverbyteIcsWSocket;
+  OverbyteIcsWndControl, OverbyteIcsWSocket, Math, System.StrUtils;
 
 type
   TForm1 = class(TForm)
@@ -126,6 +126,7 @@ type
     Panel100: TPanel;
     GroupBox2: TGroupBox;
     GroupBox3: TGroupBox;
+    TimerStatusCheck: TTimer;
     procedure SendModbusQuery(const Data: array of Byte);
     procedure btnConnectClick(Sender: TObject);
     procedure wSocketSessionConnected(Sender: TObject; ErrCode: Word);
@@ -144,6 +145,7 @@ type
     procedure btnStopZeroClick(Sender: TObject);
     procedure btnEmergencyStopClick(Sender: TObject);
     procedure btnRunRvsClick(Sender: TObject);
+    procedure TimerStatusCheckTimer(Sender: TObject);
 
   private
     { Private declarations }
@@ -159,6 +161,7 @@ var
 
 implementation
 
+//CRC 계산하는 함수  (const를 쓰는 이유 , 변하지않는 틀의 함수?)
 function ModbusCRC16(const Data: array of Byte; Len: Integer): Word;
 var
   crc: Word;
@@ -179,7 +182,8 @@ begin
   Result := crc;
 end;
 
-
+//이제 앞으로 공통적으로 모든 신호처리를 하는 프로시저
+//순서대로 번호만 넣을수있게 배열
 procedure TForm1.SendModbusQuery(const Data: array of Byte);
 var
   FullQuery: array[0..255] of Byte;
@@ -194,7 +198,7 @@ begin
   for i := 0 to len - 1 do
     FullQuery[i] := Data[i];
 
-  // 2. CRC 계산 및 추가
+  // 2. CRC 계산 및 추가 (CRC계산함수를 여기서 사용함)
   crc := ModbusCRC16(Data, len);
   FullQuery[len] := Lo(crc);        // CRC Low Byte
   FullQuery[len + 1] := Hi(crc);    // CRC High Byte
@@ -202,18 +206,20 @@ begin
   // 3. 전송
   wSocket.Send(@FullQuery, len + 2);
 
-  // 4. 로그 출력
+  // 4. 로그 출력 (로그에 보냄 부분)
   logMsg := '';
   for i := 0 to len + 1 do
     logMsg := logMsg + IntToHex(FullQuery[i], 2) + ' ';
   Memo1.Lines.Add('보냄: ' + TrimRight(logMsg));
 end;
 
-{$R *.dfm}
 
+{$R *.dfm} //이위에 선언하는 이유는 잘모름
+
+//연결버튼 클릭해서 ip주소와 포트를 연결
 procedure TForm1.btnConnectClick(Sender: TObject);
 begin
-  pnlStatus.ParentBackground := False;
+  pnlStatus.ParentBackground := False; //델파이5에서 12로 넘어갈떄 패널 색 변경할려면 사용
   pnlStatus.Color := clBlue;
   pnlStatus.Font.Color := clBlack;
   pnlStatus.Caption := '연결시도중...';
@@ -225,6 +231,7 @@ begin
   wSocket.Connect;
 end;
 
+//wSocket연결됐을때 패널상태변화 (연결버튼클릭후 바로 이어짐)
 procedure TForm1.wSocketSessionConnected(Sender: TObject; ErrCode: Word);
 begin
   if ErrCode = 0 then
@@ -233,6 +240,7 @@ begin
     pnlStatus.Color := clLime;
     pnlStatus.Font.Color := clBlack;
     pnlStatus.Caption := '연결 완료';
+    TimerStatusCheck.Enabled := True; //타이머 작동
   end
   else
   begin
@@ -243,6 +251,19 @@ begin
   end;
 end;
 
+//연결해제 버튼 누름 wSocket과 연결해제 이벤트
+procedure TForm1.btnDisconnectClick(Sender: TObject);
+begin
+  wSocket.Close;
+  TimerStatusCheck.Enabled := False; //타이머 해제
+
+  pnlStatus.ParentBackground := False;
+  pnlStatus.Color := clGray;
+  pnlStatus.Font.Color := clWhite;
+  pnlStatus.Caption := '연결 해제됨';
+end;
+
+//연결 해제버튼 누름과 연결해제시 이벤트
 procedure TForm1.wSocketSessionClosed(Sender: TObject; ErrCode: Word);
 begin
   pnlStatus.ParentBackground := False;
@@ -251,16 +272,7 @@ begin
   pnlStatus.Caption := '연결 끊어짐';
 end;
 
-procedure TForm1.btnDisconnectClick(Sender: TObject);
-begin
-  wSocket.Close;
-
-  pnlStatus.ParentBackground := False;
-  pnlStatus.Color := clGray;
-  pnlStatus.Font.Color := clWhite;
-  pnlStatus.Caption := '연결 해제됨';
-end;
-
+//명령전송버튼 클릭(테스트용)
 procedure TForm1.btnSendCommandClick(Sender: TObject);
 var
   Query: array[0..7] of Byte;
@@ -286,46 +298,149 @@ begin
   end;
 end;
 
+//중요!!!!!!!!!!!!!!!!wSocket에서 데이터 처리 프로시저
 procedure TForm1.wSocketDataAvailable(Sender: TObject; ErrCode: Word);
 var
-  Buffer: array[0..255] of Byte;
+  Buffer: array[0..255] of Byte; //버퍼를 배열로 선언
   Len, i: Integer;
-  ExpectedLen: Integer;
   MsgStr: string;
+  ByteCount: Integer;
+  ExpectedLen: Integer;
 begin
-  Len := wSocket.Receive(@Buffer, SizeOf(Buffer));
+  Len := wSocket.Receive(@Buffer, SizeOf(Buffer));//@Buffer, sizeof(buffer) -> 'Buffer라는 배열 시작 주소로부터 256바이트 크기만큼 데이터를 수신해줘' 라는 뜻
   if Len <= 0 then Exit;
 
   SetLength(ResponseBuffer, Length(ResponseBuffer) + Len);
   for i := 0 to Len - 1 do
     ResponseBuffer[Length(ResponseBuffer) - Len + i] := Buffer[i];
 
-  while True do
+  while Length(ResponseBuffer) >= 5 do // 최소 응답
   begin
-    if Length(ResponseBuffer) < 2 then Exit;
+    case ResponseBuffer[1] of  //Funtion코드를 케이스로 분리
+      $03: //3일때
+        begin
+          ByteCount := ResponseBuffer[2];
+          ExpectedLen := 3 + ByteCount + 2;
+        end;
 
-    case ResponseBuffer[1] of
-      $03 : ExpectedLen := 13;
-      $06 : ExpectedLen := 8;
-      $10 : ExpectedLen := 8;
+      $06, $10: //6이나 10일때
+        begin
+          ExpectedLen := 8;
+        end;
+
     else
-      Exit;
+      begin
+        // 알 수 없는 FunctionCode → 첫 바이트 제거
+        Delete(ResponseBuffer, 0, 1);
+        Continue;
+      end;
     end;
 
-    if Length(ResponseBuffer) < ExpectedLen then Exit;
+    if Length(ResponseBuffer) < ExpectedLen then
+      Exit;
 
-
+    // 로그 출력, 로그출력 부분에서 응답 나오는 부분
     MsgStr := '';
     for i := 0 to ExpectedLen - 1 do
       MsgStr := MsgStr + IntToHex(ResponseBuffer[i], 2) + ' ';
     Memo1.Lines.Add('응답: ' + TrimRight(MsgStr));
 
-    for i := 0 to Length(ResponseBuffer) - ExpectedLen - 1 do
-      ResponseBuffer[i] := ResponseBuffer[i + ExpectedLen];
-    SetLength(ResponseBuffer, Length(ResponseBuffer) - ExpectedLen);
+    // 상태 처리 (예: $03 상태 1/2 처리 코드 여기에 삽입)
+    if (ResponseBuffer[1] = $03) and (ResponseBuffer[2] = $04) then
+    begin
+      // 상태1 + 상태2 처리 가능
+      var
+      HighByte, LowByte, State2Byte: Byte;
+      HighByte := ResponseBuffer[3];
+      LowByte := ResponseBuffer[4];
+      State2Byte := ResponseBuffer[6];
 
+      // 패널 색상 처리
+      pnl1_START.Color := IfThen((HighByte and $01) <> 0, clLime, clBtnFace);
+      pnl1_STEPOUT.Color := IfThen((HighByte and $02) <> 0, clRed, clBtnFace);
+      pnl1_MOVE.Color := IfThen((HighByte and $04) <> 0, clLime, clBtnFace);
+      pnl1_HOME.Color := IfThen((HighByte and $08) <> 0, clLime, clBtnFace);
+      pnl1_READY.Color := IfThen((HighByte and $20) <> 0, clLime, clBtnFace);
+      pnl1_AREA.Color := IfThen((HighByte and $80) <> 0, clLime, clBtnFace);
+
+      pnl1_M0.Color := IfThen((LowByte and $01) <> 0, clLime, clBtnFace);
+      pnl1_M1.Color := IfThen((LowByte and $02) <> 0, clLime, clBtnFace);
+      pnl1_M2.Color := IfThen((LowByte and $04) <> 0, clLime, clBtnFace);
+      pnl1_M3.Color := IfThen((LowByte and $08) <> 0, clLime, clBtnFace);
+      pnl1_M4.Color := IfThen((LowByte and $10) <> 0, clLime, clBtnFace);
+      pnl1_M5.Color := IfThen((LowByte and $20) <> 0, clLime, clBtnFace);
+      pnl1_WNG.Color := IfThen((LowByte and $40) <> 0, clRed, clBtnFace);
+      pnl1_ALM.Color := IfThen((LowByte and $80) <> 0, clRed, clBtnFace);
+
+      pnl2_SBSY.Color := IfThen((State2Byte and $01) <> 0, clLime, clBtnFace);
+      pnl2_ENABLE.Color := IfThen((State2Byte and $02) <> 0, clLime, clBtnFace);
+      pnl2_OH.Color := IfThen((State2Byte and $04) <> 0, clRed, clBtnFace);
+      pnl2_TIM.Color := IfThen((State2Byte and $08) <> 0, clLime, clBtnFace);
+      pnl2_ZSG.Color := IfThen((State2Byte and $10) <> 0, clLime, clBtnFace);
+    end;
+
+    if (ResponseBuffer[1] = $03) and (ResponseBuffer[2] = $04) then
+    begin
+      var
+      HighByte1, LowByte1, HighByte2, LowByte2: Byte;
+      HighByte1 := ResponseBuffer[3];
+      LowByte1 := ResponseBuffer[4];
+      HighByte2 := ResponseBuffer[5];
+      LowByte2 := ResponseBuffer[6];
+
+      pnl3_ALMCD.Color := IfThen((HighByte1) <> 0, clLime, clBtnFace);
+      pnl3_ALMCD.Caption := IfThen((HighByte1) <> 0, 'ALMCD ON', 'ALMCD OFF');
+
+      pnl3_M0.Color := IfThen((LowByte1 and $01) <> 0, clLime, clBtnFace);
+      pnl3_M1.Color := IfThen((LowByte1 and $02) <> 0, clLime, clBtnFace);
+      pnl3_M2.Color := IfThen((LowByte1 and $04) <> 0, clLime, clBtnFace);
+      pnl3_M3.Color := IfThen((LowByte1 and $08) <> 0, clLime, clBtnFace);
+      pnl3_M4.Color := IfThen((LowByte1 and $10) <> 0, clLime, clBtnFace);
+      pnl3_M5.Color := IfThen((LowByte1 and $20) <> 0, clLime, clBtnFace);
+      pnl3_TIM.Color := IfThen((LowByte1 and $40) <> 0, clLime, clBtnFace);
+      pnl3_TIM.Caption := IfThen((LowByte1 and $40) <> 0, 'TIM검출중', 'TIM검출없음');
+      pnl3_ZSG.Color := IfThen((LowByte1 and $80) <> 0, clLime, clBtnFace);
+      pnl3_ZSG.Caption := IfThen((LowByte1 and $80) <> 0, 'Z검출중', 'Z검출없음');
+
+      pnl3_WNG.Color := IfThen((HighByte2 and $01) <> 0, clRed, clBtnFace);
+      pnl3_WNG.Caption := IfThen((HighByte2 and $01) <> 0, 'WARNING', 'SAFE');
+      pnl3_STEPOUT.Color := IfThen((HighByte2 and $02) <> 0, clLime, clBtnFace);
+      pnl3_STEPOUT.Caption := IfThen((HighByte2 and $02) <> 0, '편차이상발생', '편차이상없음');
+      pnl3_PLS.Color := IfThen((HighByte2 and $04) <> 0, clLime, clBtnFace);
+      pnl3_PLS.Caption := IfThen((HighByte2 and $04) <> 0, 'LS+ ON', 'LS+ OFF');
+      pnl3_MLS.Color := IfThen((HighByte2 and $08) <> 0, clLime, clBtnFace);
+      pnl3_MLS.Caption := IfThen((HighByte2 and $08) <> 0, 'LS- ON', 'LS- OFF');
+      pnl3_SLIT.Color := IfThen((HighByte2 and $10) <> 0, clLime, clBtnFace);
+      pnl3_SLIT.Caption := IfThen((HighByte2 and $10) <> 0, 'SLIT ON', 'SLIT OFF');
+      pnl3_HOMES.Color := IfThen((HighByte2 and $20) <> 0, clLime, clBtnFace);
+      pnl3_HOMES.Caption := IfThen((HighByte2 and $20) <> 0, 'HOMES ON', 'HOMES OFF');
+      pnl3_OH.Color := IfThen((HighByte2 and $40) <> 0, clRed, clBtnFace);
+      pnl3_OH.Caption := IfThen((HighByte2 and $40) <> 0, '과열WNG', '과열없음');
+      pnl3_START.Color := IfThen((HighByte2 and $80) <> 0, clLime, clBtnFace);
+      pnl3_START.Caption := IfThen((HighByte2 and $80) <> 0, 'START', 'STOP');
+
+      pnl3_MOVE.Color := IfThen((LowByte2 and $01) <> 0, clLime, clBtnFace);
+      pnl3_MOVE.Caption := IfThen((LowByte2 and $01) <> 0, '운전중', '정지중');
+      pnl3_0.Color := IfThen((LowByte2 and $02) <> 0, clLime, clBtnFace);
+      pnl3_HOME.Color := IfThen((LowByte2 and $04) <> 0, clLime, clBtnFace);
+      pnl3_HOME.Caption := IfThen((LowByte2 and $04) <> 0, 'Motor원점', 'Motor원점X');
+      pnl3_READY.Color := IfThen((LowByte2 and $08) <> 0, clLime, clBtnFace);
+      pnl3_READY.Caption := IfThen((LowByte2 and $08) <> 0, '운전준비완료', '운전불가');
+      pnl3_SBSY.Color := IfThen((LowByte2 and $10) <> 0, clLime, clBtnFace);
+      pnl3_SBSY.Caption := IfThen((LowByte2 and $10) <> 0, '내부처리중', '내부처리X');
+      pnl3_AREA.Color := IfThen((LowByte2 and $20) <> 0, clLime, clBtnFace);
+      pnl3_AREA.Caption := IfThen((LowByte2 and $20) <> 0, 'AREA범위안', 'AREA범위밖');
+      pnl3_ALM.Color := IfThen((LowByte2 and $40) <> 0, clRed, clBtnFace);
+      pnl3_ALM.Caption := IfThen((LowByte2 and $40) <> 0, 'ALM발생중', 'ALM없음');
+      pnl3_ENABLE.Color := IfThen((LowByte2 and $80) <> 0, clLime, clBtnFace);
+      pnl3_ENABLE.Caption := IfThen((LowByte2 and $80) <> 0, 'ENABLE', 'DISABLE');
+    end;
+
+    // 처리한 응답 제거
+    Delete(ResponseBuffer, 0, ExpectedLen);
   end;
 end;
+
 
 procedure TForm1.btnExciteClick(Sender: TObject);
 begin
@@ -491,6 +606,17 @@ begin
     $06,
     $00, $1E,
     $00, $00
+  ]);
+end;
+
+procedure TForm1.TimerStatusCheckTimer(Sender: TObject);
+begin
+  SendModbusQuery // 상태 1,2 를 한번에 이어서 진행
+  ([
+    $01,
+    $03,
+    $00, $20,
+    $00, $02
   ]);
 end;
 
