@@ -5,9 +5,12 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.ExtCtrls,
-  OverbyteIcsWndControl, OverbyteIcsWSocket, Math, System.StrUtils;
+  OverbyteIcsWndControl, OverbyteIcsWSocket, Math, System.StrUtils, Vcl.Buttons,
+  Vcl.Samples.Spin, Vcl.ComCtrls;
 
 type
+  TStatusStep = (psState1And2, psDriverStatus, psStepPosition, psSpeedStatus, psSpeedInfo);
+
   TForm1 = class(TForm)
     wSocket: TWSocket;
     pnlStatus: TPanel;
@@ -23,13 +26,7 @@ type
     btnStartZero: TButton;
     btnStopZero: TButton;
     btnEmergencyStop: TButton;
-    btnSetPosition: TButton;
-    btnSetSpeed: TButton;
-    edtSetPosition: TEdit;
-    edtSetSpeed: TEdit;
     Panel1: TPanel;
-    Label1: TLabel;
-    Label2: TLabel;
     btnRunRvs: TButton;
     Panel3: TPanel;
     Panel4: TPanel;
@@ -126,7 +123,29 @@ type
     Panel100: TPanel;
     GroupBox2: TGroupBox;
     GroupBox3: TGroupBox;
-    TimerStatusCheck: TTimer;
+    TimerStatus: TTimer;
+    pnlCurrentStep: TPanel;
+    Button1: TButton;
+    pnlCurrentSpeed: TPanel;
+    Panel12: TPanel;
+    btnSetPosition: TBitBtn;
+    btnSetSpeed: TBitBtn;
+    btnSpeedUp: TBitBtn;
+    btnSpeedDown: TBitBtn;
+    spnSetPosition: TSpinEdit;
+    spnSetSpeed: TSpinEdit;
+    spnSpeedUp: TSpinEdit;
+    spnSpeedDown: TSpinEdit;
+    pnlSpeedUp: TPanel;
+    pnlSpeedDown: TPanel;
+    Label1: TLabel;
+    Label2: TLabel;
+    Label3: TLabel;
+    Label4: TLabel;
+    Label5: TLabel;
+    Panel2: TPanel;
+    btnPreset: TButton;
+    StatusBar1: TStatusBar;
     procedure SendModbusQuery(const Data: array of Byte);
     procedure btnConnectClick(Sender: TObject);
     procedure wSocketSessionConnected(Sender: TObject; ErrCode: Word);
@@ -145,7 +164,11 @@ type
     procedure btnStopZeroClick(Sender: TObject);
     procedure btnEmergencyStopClick(Sender: TObject);
     procedure btnRunRvsClick(Sender: TObject);
-    procedure TimerStatusCheckTimer(Sender: TObject);
+    procedure TimerStatusTimer(Sender: TObject);
+    procedure btnSpeedUpClick(Sender: TObject);
+    procedure btnSpeedDownClick(Sender: TObject);
+    procedure Button1Click(Sender: TObject);
+    procedure btnPresetClick(Sender: TObject);
 
   private
     { Private declarations }
@@ -157,7 +180,9 @@ var
   Form1: TForm1;
   rcvData : string;
   ResponseBuffer : array of Byte;
-
+  WaitingForReply : Boolean = False; //타이머 순서 기다려주기
+  CurrentStep : TStatusStep = psState1And2; // 타이머 status (?)
+  TargetStepPosition: LongInt = 0; // step이동후 step운전정지 버튼을 실행하는 명령을 위한 선언  (nil)<-이벤트 실행이없더라도 가상으로 실행시킴
 
 implementation
 
@@ -191,6 +216,15 @@ var
   crc: Word;
   logMsg: string;
 begin
+  //+추가 타이머와 이벤트버튼이 충돌하지않는 코드
+  if WaitingForReply then
+  begin
+    //Memo1.Lines.Add('통신중이므로 전송 취소됨');
+    Exit;
+  end;
+
+  WaitingForReply := True;
+  TimerStatus.Enabled := False;
 
   len := Length(Data);
 
@@ -212,7 +246,6 @@ begin
     logMsg := logMsg + IntToHex(FullQuery[i], 2) + ' ';
   Memo1.Lines.Add('보냄: ' + TrimRight(logMsg));
 end;
-
 
 {$R *.dfm} //이위에 선언하는 이유는 잘모름
 
@@ -240,7 +273,8 @@ begin
     pnlStatus.Color := clLime;
     pnlStatus.Font.Color := clBlack;
     pnlStatus.Caption := '연결 완료';
-    TimerStatusCheck.Enabled := True; //타이머 작동
+    TimerStatus.Enabled := True; //타이머 작동
+
   end
   else
   begin
@@ -255,7 +289,8 @@ end;
 procedure TForm1.btnDisconnectClick(Sender: TObject);
 begin
   wSocket.Close;
-  TimerStatusCheck.Enabled := False; //타이머 해제
+  TimerStatus.Enabled := False; //타이머 해제
+
 
   pnlStatus.ParentBackground := False;
   pnlStatus.Color := clGray;
@@ -298,64 +333,57 @@ begin
   end;
 end;
 
+//ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ연결후 작동부분ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ
+
 //중요!!!!!!!!!!!!!!!!wSocket에서 데이터 처리 프로시저
 procedure TForm1.wSocketDataAvailable(Sender: TObject; ErrCode: Word);
 var
-  Buffer: array[0..255] of Byte; //버퍼를 배열로 선언
+  Buffer: array[0..255] of Byte;
   Len, i: Integer;
   MsgStr: string;
   ByteCount: Integer;
   ExpectedLen: Integer;
 begin
-  Len := wSocket.Receive(@Buffer, SizeOf(Buffer));//@Buffer, sizeof(buffer) -> 'Buffer라는 배열 시작 주소로부터 256바이트 크기만큼 데이터를 수신해줘' 라는 뜻
+  Len := wSocket.Receive(@Buffer, SizeOf(Buffer));
   if Len <= 0 then Exit;
 
   SetLength(ResponseBuffer, Length(ResponseBuffer) + Len);
   for i := 0 to Len - 1 do
     ResponseBuffer[Length(ResponseBuffer) - Len + i] := Buffer[i];
 
-  while Length(ResponseBuffer) >= 5 do // 최소 응답
+  while Length(ResponseBuffer) >= 5 do  //function코드에 따라 응답 case 나눔 $03, $06, $10
   begin
-    case ResponseBuffer[1] of  //Funtion코드를 케이스로 분리
-      $03: //3일때
+    case ResponseBuffer[1] of
+      $03:
         begin
           ByteCount := ResponseBuffer[2];
           ExpectedLen := 3 + ByteCount + 2;
         end;
-
-      $06, $10: //6이나 10일때
-        begin
-          ExpectedLen := 8;
-        end;
-
+      $06, $10:
+        ExpectedLen := 8;
     else
-      begin
-        // 알 수 없는 FunctionCode → 첫 바이트 제거
-        Delete(ResponseBuffer, 0, 1);
-        Continue;
-      end;
+      Delete(ResponseBuffer, 0, 1);
+      Continue;
     end;
 
-    if Length(ResponseBuffer) < ExpectedLen then
-      Exit;
+    if Length(ResponseBuffer) < ExpectedLen then Exit;
 
-    // 로그 출력, 로그출력 부분에서 응답 나오는 부분
     MsgStr := '';
     for i := 0 to ExpectedLen - 1 do
       MsgStr := MsgStr + IntToHex(ResponseBuffer[i], 2) + ' ';
-    Memo1.Lines.Add('응답: ' + TrimRight(MsgStr));
+    Memo1.Lines.Add('응답: ' + TrimRight(MsgStr)); //응답받아오는 부분(로그표시)
 
-    // 상태 처리 (예: $03 상태 1/2 처리 코드 여기에 삽입)
-    if (ResponseBuffer[1] = $03) and (ResponseBuffer[2] = $04) then
+//ㅡㅡㅡㅡㅡ상태바 표시하는 부분 (타이머에 그냥 선언할경우 동시실행되서 순서 유지ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ
+
+    //상태바 1,2 표시
+    if (CurrentStep = psState1And2) and
+       (ResponseBuffer[1] = $03) and (ResponseBuffer[2] = $04) then
     begin
-      // 상태1 + 상태2 처리 가능
-      var
-      HighByte, LowByte, State2Byte: Byte;
+      var HighByte, LowByte, State2Byte: Byte;
       HighByte := ResponseBuffer[3];
       LowByte := ResponseBuffer[4];
       State2Byte := ResponseBuffer[6];
 
-      // 패널 색상 처리
       pnl1_START.Color := IfThen((HighByte and $01) <> 0, clLime, clBtnFace);
       pnl1_STEPOUT.Color := IfThen((HighByte and $02) <> 0, clRed, clBtnFace);
       pnl1_MOVE.Color := IfThen((HighByte and $04) <> 0, clLime, clBtnFace);
@@ -379,16 +407,17 @@ begin
       pnl2_ZSG.Color := IfThen((State2Byte and $10) <> 0, clLime, clBtnFace);
     end;
 
-    if (ResponseBuffer[1] = $03) and (ResponseBuffer[2] = $04) then
+    //drive 상태 표시
+    if (CurrentStep = psDriverStatus) and
+       (ResponseBuffer[1] = $03) and (ResponseBuffer[2] = $04) then
     begin
-      var
-      HighByte1, LowByte1, HighByte2, LowByte2: Byte;
+      var HighByte1, LowByte1, HighByte2, LowByte2: Byte;
       HighByte1 := ResponseBuffer[3];
       LowByte1 := ResponseBuffer[4];
       HighByte2 := ResponseBuffer[5];
       LowByte2 := ResponseBuffer[6];
 
-      pnl3_ALMCD.Color := IfThen((HighByte1) <> 0, clLime, clBtnFace);
+      pnl3_ALMCD.Color := IfThen((HighByte1) <> 0, clRed, clBtnFace);
       pnl3_ALMCD.Caption := IfThen((HighByte1) <> 0, 'ALMCD ON', 'ALMCD OFF');
 
       pnl3_M0.Color := IfThen((LowByte1 and $01) <> 0, clLime, clBtnFace);
@@ -436,12 +465,72 @@ begin
       pnl3_ENABLE.Caption := IfThen((LowByte2 and $80) <> 0, 'ENABLE', 'DISABLE');
     end;
 
-    // 처리한 응답 제거
+    //패널에 실시간 step위치 표시
+    if (CurrentStep = psStepPosition) and
+       (ResponseBuffer[1] = $03) and (ResponseBuffer[2] = $04) and (Length(ResponseBuffer) >= 9) then
+    begin
+      var posHiHi := ResponseBuffer[3];
+      var posHiLo := ResponseBuffer[4];
+      var posLoHi := ResponseBuffer[5];
+      var posLoLo := ResponseBuffer[6];
+
+      var position: LongInt;
+      position := (posHiHi shl 24) or (posHiLo shl 16) or (posLoHi shl 8) or posLoLo;
+
+      if (position and $80000000) <> 0 then
+        position := LongInt(LongWord(position));
+
+      pnlCurrentStep.Caption := IntToStr(position);
+
+      if TargetStepPosition = position then
+      begin
+        btnStopMotorClick(nil);
+      end;
+    end;
+
+    //패널에 실시간 속도 표시
+    if (CurrentStep = psSpeedStatus) and
+       (ResponseBuffer[1] = $03) and (ResponseBuffer[2] = $02) then
+    begin
+      var speedHi := ResponseBuffer[3];
+      var speedLo := ResponseBuffer[4];
+      var speed := (speedHi shl 8) or speedLo;
+
+      pnlCurrentSpeed.Caption := IntToStr(speed) + 'Hz';
+    end;
+
+    //패널에 가속, 감속 표시
+    if (ResponseBuffer[1] = $03) and (ResponseBuffer[2] = $08) then
+    begin
+      var AccHi := ResponseBuffer[3];
+      var AccLo := ResponseBuffer[4];
+      var DecHi := ResponseBuffer[5];
+      var DecLo := ResponseBuffer[6];
+
+      var acc := (AccHi shl 8) or AccLo;
+      var dec := (DecHi shl 8) or DecLo;
+
+      pnlSpeedUp.Caption := IntToStr(acc);
+      pnlSpeedDown.Caption := IntToStr(dec);
+    end;
+
+    WaitingForReply := False;
+    TimerStatus.Enabled := True;
+
+    //타이머안의 실행순서
+    case CurrentStep of
+      psState1And2:   CurrentStep := psDriverStatus;
+      psDriverStatus: CurrentStep := psStepPosition;
+      psStepPosition: CurrentStep := psSpeedStatus;
+      psSpeedStatus:  CurrentStep := psSpeedInfo;
+      psSpeedInfo:    CurrentStep := psState1And2;
+    end;
+
     Delete(ResponseBuffer, 0, ExpectedLen);
   end;
 end;
 
-
+//C - ON버튼 클릭 (여자 ON)
 procedure TForm1.btnExciteClick(Sender: TObject);
 begin
   SendModbusQuery
@@ -453,13 +542,14 @@ begin
   ]);
 end;
 
+//위치설정 버튼(1000기본)
 procedure TForm1.btnSetPositionClick(Sender: TObject);
 var
   stepValue: LongInt;
   highWord, lowWord: Word;
 begin
   try
-    stepValue := StrToInt(edtSetPosition.Text);
+    stepValue := spnSetPosition.Value;
   except
     ShowMessage('숫자를 입력해주세요!');
     Exit;
@@ -470,6 +560,8 @@ begin
     ShowMessage('0 ~ 2,147,483,647 범위만 가능합니다!');
     Exit;
   end;
+
+  TargetStepPosition := stepValue;
 
   highWord := Word((LongWord(stepValue) shr 16) and $FFFF);
   lowWord  := Word(LongWord(stepValue) and $FFFF);
@@ -486,13 +578,14 @@ begin
   ]);
 end;
 
+//모터스피드 설정 버튼
 procedure TForm1.btnSetSpeedClick(Sender: TObject);
 var
   speedValue: LongInt;
   highWord, lowWord: Word;
 begin
   try
-    speedValue := StrToInt(edtSetSpeed.Text);
+    speedValue := spnSetSpeed.Value;
   except
     ShowMessage('숫자를 정확히 입력해주세요!');
     Exit;
@@ -519,8 +612,45 @@ begin
   ]);
 end;
 
+//가속 버튼
+procedure TForm1.btnSpeedUpClick(Sender: TObject);
+var
+  rate: Word;
+begin
+  rate := spnSpeedUp.Value;
 
+  SendModbusQuery
+  ([
+    $01,
+    $10,
+    $02, $24,
+    $00, $02,
+    $04,
+    Hi(rate shr 8), Lo(rate shr 8),
+    Hi(rate), Lo(rate)
+  ]);
+end;
 
+//감속버튼
+procedure TForm1.btnSpeedDownClick(Sender: TObject);
+var
+  rate: Word;
+begin
+  rate := spnSpeedDown.Value;
+
+  SendModbusQuery
+  ([
+    $01,
+    $10,
+    $02, $26,
+    $00, $02,
+    $04,
+    Hi(rate shr 8), Lo(rate shr 8),
+    Hi(rate), Lo(rate)
+  ]);
+end;
+
+//모터를 스텝처음위치로 맞추는 버튼
 procedure TForm1.btnStartMotorClick(Sender: TObject);
 begin
   SendModbusQuery
@@ -532,6 +662,7 @@ begin
   ]);
 end;
 
+//모터 스텝 이동 버튼 정지 버튼
 procedure TForm1.btnStopMotorClick(Sender: TObject);
 begin
   SendModbusQuery
@@ -543,6 +674,36 @@ begin
   ]);
 end;
 
+//step을 현재위치를 0으로 만들어주는 버튼
+procedure TForm1.btnPresetClick(Sender: TObject);
+begin
+  SendModbusQuery
+  ([
+    $01,
+    $06,
+    $00, $48,
+    $00, $01
+  ]);
+
+  TThread.CreateAnonymousThread(
+    procedure
+    begin
+      Sleep(100);
+      TThread.Synchronize(nil,
+        procedure
+        begin
+            SendModbusQuery([
+              $01, $06,
+              $00, $48,
+              $00, $00
+            ]);
+        end
+       );
+    end
+  ).Start;
+end;
+
+//FWD 모터가 정방향으로 움직이게 하는 버튼
 procedure TForm1.btnRunContinueClick(Sender: TObject);
 begin
   SendModbusQuery
@@ -554,6 +715,7 @@ begin
   ]);
 end;
 
+//RVS 모터가 역방향으로 움직이게 하는 버튼
 procedure TForm1.btnRunRvsClick(Sender: TObject);
 begin
   SendModbusQuery
@@ -565,6 +727,7 @@ begin
   ]);
 end;
 
+//FWD, RVS가 정지하게 하는 버튼 (RunStop)
 procedure TForm1.btnStopContinueClick(Sender: TObject);
 begin
   SendModbusQuery
@@ -576,6 +739,7 @@ begin
   ]);
 end;
 
+//모터 원점 이동 버튼 (HOME)
 procedure TForm1.btnStartZeroClick(Sender: TObject);
 begin
   SendModbusQuery
@@ -587,6 +751,7 @@ begin
   ]);
 end;
 
+//모터 원점이동 정지 버튼
 procedure TForm1.btnStopZeroClick(Sender: TObject);
 begin
   SendModbusQuery
@@ -598,6 +763,7 @@ begin
   ]);
 end;
 
+//전체 강제 정지(STOP)
 procedure TForm1.btnEmergencyStopClick(Sender: TObject);
 begin
   SendModbusQuery
@@ -609,14 +775,90 @@ begin
   ]);
 end;
 
-procedure TForm1.TimerStatusCheckTimer(Sender: TObject);
+//초당 상태를 계속 읽어오기위한 타이머
+procedure TForm1.TimerStatusTimer(Sender: TObject);
 begin
-  SendModbusQuery // 상태 1,2 를 한번에 이어서 진행
+  StatusBar1.Panels[0].Text := 'STEP:' + IntToStr(ord(CurrentStep));
+
+  if WaitingForReply then Exit;
+
+  case CurrentStep of
+    psState1And2://상태 1,2 를 한번에 이어서 진행
+      begin
+        StatusBar1.Panels[1].Text := '상태1,2표시';
+        SendModbusQuery
+        ([
+          $01,
+          $03,
+          $00, $20,
+          $00, $02
+        ]);
+        WaitingForReply := True;
+      end;
+
+    psDriverStatus: //드라이버 상태를 표시
+      begin
+        StatusBar1.Panels[1].Text := '드라이버 상태 표시';
+        SendModbusQuery
+        ([
+          $01,
+          $03,
+          $01, $33,
+          $00, $02
+        ]);
+        WaitingForReply := True;
+      end;
+
+    psStepPosition: //step(현재위치)를 실시간으로 표시
+      begin
+        StatusBar1.Panels[1].Text := 'step위치 표시';
+        SendModbusQuery
+        ([
+          $01,
+          $03,
+          $01, $18,
+          $00, $02
+        ]);
+        WaitingForReply := True;
+      end;
+
+    psSpeedStatus: //현재 속도를 실시간으로 표시
+      begin
+        StatusBar1.Panels[1].Text := '속도 표시';
+        SendModbusQuery
+        ([
+          $01,
+          $03,
+          $01, $1D,
+          $00, $01
+        ]);
+        WaitingForReply := True;
+      end;
+
+    psSpeedInfo: //
+      begin
+        StatusBar1.Panels[1].Text := '가속 감속 표시';
+        SendModbusQuery
+        ([
+          $01,
+          $03,
+          $02, $24,
+          $00, $04
+        ]);
+        WaitingForReply := True;
+      end;
+  end;
+end;
+
+//테스트용
+procedure TForm1.Button1Click(Sender: TObject);
+begin
+  SendModbusQuery
   ([
     $01,
-    $03,
-    $00, $20,
-    $00, $02
+    $06,
+    $00, $40,
+    $00, $03
   ]);
 end;
 
